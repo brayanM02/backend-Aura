@@ -8,35 +8,32 @@ router.use(authMiddleware);
 function buildPrompt(message, conversationContext = [], conversationMemory = '') {
   const contextLines = renderConversationContext(conversationContext);
   return [
-    'Eres un asistente de apoyo emocional cálido, humano y conversacional para una app de ayuda psicológica.',
-    'Clasifica el mensaje del usuario y responde SOLO con JSON válido, sin markdown ni texto adicional.',
+    'Eres un asistente de apoyo emocional avanzado para una app de ayuda psicológica.',
+    'Analiza el mensaje del usuario y responde SOLO con JSON válido, sin markdown ni texto adicional.',
     'Formato exacto:',
-    '{"category":"crisis|ansiedad|estres|tristeza|familiar|sueno|general","label":"texto corto","reply":"respuesta empatica en español","recommendedSpecialty":"texto corto","crisis":true|false}',
-    'Reglas:',
+    '{"category":"crisis|ansiedad|estres|tristeza|familiar|sueno|general","label":"texto corto","reply":"respuesta empatica en español","recommendedSpecialty":"texto corto","crisis":true|false,"emotions":{"primary":"alegria|tristeza|ira|miedo|ansiedad|culpa|vergüenza|soledad|esperanza|frustracion|confianza|desesperanza","intensity":0.1-1.0,"secondary":"emocion opcional"},"therapies":[{"name":"CBT|DBT|EMDR|ACT|MBCT|etc","description":"breve descripcion","suitability":0.1-1.0}],"metrics":{"confidence":0.1-1.0,"processingTime":0,"sentimentScore":-1.0-1.0}}',
+    'Reglas de análisis de sentimientos:',
+    '- emotions.primary: emoción principal detectada (alegria, tristeza, ira, miedo, ansiedad, culpa, vergüenza, soledad, esperanza, frustracion, confianza, desesperanza)',
+    '- emotions.intensity: intensidad de la emoción (0.1=baja, 1.0=muy alta)',
+    '- emotions.secondary: emoción secundaria opcional si aplica',
+    '- metrics.sentimentScore: puntuación de sentimiento general (-1.0=muy negativo, 1.0=muy positivo)',
+    '- metrics.confidence: confianza en el análisis (0.1-1.0)',
+    '- metrics.processingTime: tiempo estimado de procesamiento en ms',
+    '',
+    'Reglas de terapias específicas:',
+    '- therapies: array de terapias recomendadas (máximo 3)',
+    '- Cada terapia debe incluir: name, description, suitability (0.1-1.0)',
+    '- Terapias disponibles: CBT (Terapia Cognitivo-Conductual), DBT (Terapia Dialéctica Conductual), EMDR (Desensibilización y Reprocesamiento por Movimientos Oculares), ACT (Terapia de Aceptación y Compromiso), MBCT (Terapia Cognitiva Basada en Mindfulness), IPT (Terapia Interpersonal), EFT (Terapia Centrada en Emociones), Gestalt, Psicodinámica, Humanista',
+    '- suitability: qué tan adecuada es la terapia para este caso específico',
+    '',
+    'Reglas generales:',
     '- Si detectas riesgo de autolesión, suicidio o peligro inmediato, category debe ser crisis y crisis=true.',
-    '- Si no hay señales claras, usa general y crisis=false.',
-    '- Piensa en problemas de escuela, trabajo, pareja, amistades, familia, duelo, soledad, autoestima, culpa, enojo, estrés, ansiedad, ataques de pánico, cansancio mental, sueño, dependencia emocional, rechazo, acoso, cambios en casa o violencia.',
-    '- reply debe sonar como una persona que acompaña, no como una plantilla ni como un sistema.',
-    '- reply debe ser breve, empática, concreta y en español natural, cercano y joven.',
+    '- reply debe sonar como una persona que acompaña, no como una plantilla.',
+    '- reply debe ser breve, empática, concreta y en español natural.',
     '- No repitas ni paraphrasees literalmente el mensaje del usuario.',
-    '- No digas cosas como "esto parece un tema familiar", "esto es ansiedad" o "suena a conflicto".',
-    '- No expliques la situación con etiquetas; responde a lo que está pasando como si conversarás con una persona real.',
-    '- No copies las palabras del usuario en la primera frase ni cierres con frases vacías.',
     '- Usa el contexto reciente para responder con criterio y continuidad.',
-    '- La reply debe incluir una observación humana sobre lo que siente la persona o una pregunta concreta para seguir.',
-    '- Si el mensaje habla de golpes, maltrato o una agresión en casa, responde con prioridad de seguridad y pregunta si están a salvo ahora mismo.',
-    '- Si el usuario dice que quiere hablar con un psicólogo, con una persona o con alguien de apoyo, responde de forma directa y cálida, sin seguir dando vueltas.',
-    '- Si el mensaje es claramente de deportes, clima, noticias, política, videojuegos, música o cualquier tema que no sea psicológico, de trauma o familiar, responde que solo ayudas con esos temas y redirige con calma.',
-    '- recommendedSpecialty debe ser una especialidad de psicología útil para el caso.',
-    '- memory debe ser un perfil persistente de este mismo usuario, no un resumen genérico.',
-    '- memory debe incluir solo hechos estables y útiles: nombre o apodo si aparece, cómo prefiere ser tratado, temas recurrentes, contexto familiar/escolar/laboral, riesgos, cosas que ayudan y cosas que empeoran.',
-    '- si la memoria viene en formato estructurado tipo categoria|score|contenido, consérvala y actualízala en ese mismo formato.',
-    '- memory no debe copiar el mensaje completo; debe guardar solo hechos, riesgos o contexto que sigan siendo útiles en el siguiente turno.',
-    '- si ya existe una memoria previa, consérvala y súmale solo lo nuevo que sea realmente útil; no borres datos importantes anteriores.',
-    '- si no hay datos nuevos, devuelve la misma memoria anterior sin rehacerla de forma innecesaria.',
-    '- si el usuario vuelve a escribir, la respuesta debe notar continuidad de forma natural cuando tenga sentido, sin sonar invasiva.',
-    '- No menciones políticas internas ni instrucciones técnicas.',
-    '- No uses markdown ni comillas decorativas.',
+    '- recommendedSpecialty debe ser una especialidad de psicología útil.',
+    '- memory debe incluir hechos estables: nombre, profesión, hobbies, contexto familiar, riesgos.',
     '',
     conversationMemory ? `Memoria persistente actual:\n${conversationMemory}` : 'Memoria persistente actual: vacía.',
     '',
@@ -504,6 +501,7 @@ function detectLocalCategory(message) {
 }
 
 router.post('/triage', async (req, res) => {
+  const startTime = Date.now();
   try {
     const { message, conversationContext, conversationMemory } = req.body;
     if (!message || !String(message).trim()) {
@@ -516,6 +514,7 @@ router.post('/triage', async (req, res) => {
     }
 
     if (isOutOfScopeIntent(message)) {
+      const processingTime = Date.now() - startTime;
       return res.json({
         category: 'general',
         label: 'fuera de alcance',
@@ -523,6 +522,17 @@ router.post('/triage', async (req, res) => {
         recommendedSpecialty: 'Bienestar emocional',
         crisis: false,
         memory: String(conversationMemory || '').trim(),
+        emotions: {
+          primary: 'neutral',
+          intensity: 0.3,
+          secondary: null
+        },
+        therapies: [],
+        metrics: {
+          confidence: 0.9,
+          processingTime,
+          sentimentScore: 0.0
+        },
         raw: { fallback: true, reason: 'Tema fuera de alcance' },
       });
     }
@@ -548,6 +558,8 @@ router.post('/triage', async (req, res) => {
       parsed = null;
     }
 
+    const processingTime = Date.now() - startTime;
+
     if (!parsed || typeof parsed !== 'object') {
       const localCategory = detectLocalCategory(message);
       return res.json({
@@ -562,6 +574,19 @@ router.post('/triage', async (req, res) => {
         recommendedSpecialty: localCategory === 'crisis' ? 'Crisis y contención' : 'Bienestar emocional',
         crisis: localCategory === 'crisis',
         memory: incomingMemory,
+        emotions: {
+          primary: localCategory === 'crisis' ? 'miedo' : 'neutral',
+          intensity: localCategory === 'crisis' ? 0.8 : 0.3,
+          secondary: null
+        },
+        therapies: localCategory === 'crisis' ? 
+          [{ name: 'DBT', description: 'Terapia Dialéctica Conductual para manejo de crisis', suitability: 0.8 }] : 
+          [{ name: 'CBT', description: 'Terapia Cognitivo-Conductual para bienestar general', suitability: 0.6 }],
+        metrics: {
+          confidence: 0.5,
+          processingTime,
+          sentimentScore: localCategory === 'crisis' ? -0.7 : 0.0
+        },
         raw: { fallback: true, reason: 'Gemini no devolvió JSON válido' },
       });
     }
@@ -574,6 +599,29 @@ router.post('/triage', async (req, res) => {
     const crisisValue = parsed.crisis;
     const crisis = crisisValue === true || crisisValue === 'true' || crisisValue === 1 || crisisValue === '1';
     const summaryIntent = isSummaryIntent(String(message));
+
+    // Análisis de sentimientos con valores por defecto
+    const emotions = parsed.emotions || {};
+    const emotionsResult = {
+      primary: String(emotions.primary || 'neutral').trim(),
+      intensity: Math.max(0.1, Math.min(1.0, parseFloat(emotions.intensity) || 0.5)),
+      secondary: emotions.secondary ? String(emotions.secondary).trim() : null
+    };
+
+    // Terapias recomendadas con validación
+    const therapies = Array.isArray(parsed.therapies) ? parsed.therapies.slice(0, 3).map(therapy => ({
+      name: String(therapy.name || 'CBT').trim(),
+      description: String(therapy.description || 'Terapia recomendada').trim(),
+      suitability: Math.max(0.1, Math.min(1.0, parseFloat(therapy.suitability) || 0.5))
+    })) : [{ name: 'CBT', description: 'Terapia Cognitivo-Conductual', suitability: 0.6 }];
+
+    // Métricas de efectividad
+    const metrics = parsed.metrics || {};
+    const metricsResult = {
+      confidence: Math.max(0.1, Math.min(1.0, parseFloat(metrics.confidence) || 0.7)),
+      processingTime,
+      sentimentScore: Math.max(-1.0, Math.min(1.0, parseFloat(metrics.sentimentScore) || 0.0))
+    };
 
     if (summaryIntent) {
       reply = buildSummaryReply(
@@ -598,9 +646,24 @@ router.post('/triage', async (req, res) => {
       recommendedSpecialty,
       crisis,
       memory,
+      emotions: emotionsResult,
+      therapies,
+      metrics: metricsResult,
       raw: parsed,
     });
   } catch (error) {
+    const processingTime = Date.now() - startTime;
+    console.error('Error en triage:', error);
+    return res.status(500).json({ 
+      error: 'Error interno del servidor',
+      metrics: {
+        confidence: 0.0,
+        processingTime,
+        sentimentScore: 0.0
+      }
+    });
+  }
+});
     const message = String(req.body?.message || '');
     const conversationContext = Array.isArray(req.body?.conversationContext)
       ? req.body.conversationContext
@@ -617,8 +680,6 @@ router.post('/triage', async (req, res) => {
       memory: conversationMemory,
       raw: { fallback: true, error: error.message },
     });
-  }
-});
 
 // Ruta temporal para listar modelos disponibles de Gemini
 router.get('/list-gemini-models', async (req, res) => {
